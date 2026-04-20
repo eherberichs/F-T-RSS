@@ -75,8 +75,17 @@ if all_records:
     df = pd.json_normalize(all_records)
     df["fetched_at"] = datetime.now(UTC)
 
-    # Ensure consistent ordering
-    df = df.sort_values("startDate", ascending=False)
+# --- Ensure startDate exists ---
+if "startDate" not in df.columns:
+    print("⚠️ 'startDate' column missing. Available columns:")
+    print(df.columns.tolist())
+    df["startDate"] = None  # fallback to avoid crash
+
+# Convert to datetime safely
+df["startDate"] = pd.to_datetime(df["startDate"], errors="coerce")
+
+# Sort safely
+df = df.sort_values("startDate", ascending=False, na_position="last")
 
     df.to_csv(DATA_FILE, index=False)
     print(f"Saved {len(df)} records → {DATA_FILE}")
