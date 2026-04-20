@@ -5,8 +5,18 @@ on:
     - cron: "0 7 * * *"
   workflow_dispatch:
 
+# Prevent concurrent runs from conflicting
+concurrency:
+  group: rss-feed
+  cancel-in-progress: true
+
+# Required to push changes
 permissions:
   contents: write
+
+# Future-proof GitHub Actions runtime
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   update-feed:
@@ -36,4 +46,8 @@ jobs:
 
           git add eu_calls_feed.xml eu_calls_snapshot.csv
           git commit -m "Update RSS feed" || echo "No changes"
+
+          # 🔑 Pull latest changes to avoid conflicts
+          git pull --rebase origin main || echo "Nothing to rebase"
+
           git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
