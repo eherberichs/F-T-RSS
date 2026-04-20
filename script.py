@@ -107,63 +107,56 @@ def create_rss(df, output_file):
     rss = Element("rss", version="2.0")
     channel = SubElement(rss, "channel")
 
-    SubElement(channel, "title").text = "EU Funding Calls"
+    SubElement(channel, "title").text = "EU Funding Calls (2021–2027)"
     SubElement(channel, "link").text = "https://ec.europa.eu/info/funding-tenders/opportunities/portal"
-    SubElement(channel, "description").text = "Latest EU funding opportunities"
+    SubElement(channel, "description").text = "Latest open EU funding calls"
     SubElement(channel, "lastBuildDate").text = datetime.now(UTC).strftime("%a, %d %b %Y %H:%M:%S GMT")
 
     for _, row in df.iterrows():
-        item = SubElement(channel, "item")
-
-        # --- FIELD EXTRACTION ---
-        identifier = str(
-            row.get("metadata.identifier")
-            or "N/A"
-        )
-
-        summary = str(
-            row.get("summary")
-            or row.get("description")
-            or "No summary available"
-        )[:1000]
-
-        url = str(
-            row.get("url")
-            or f"https://ec.europa.eu/info/funding-tenders/opportunities/portal/screen/opportunities/topic-details/{identifier}"
-        )
-
+        reference = str(row.get("reference") or "")
+        title = str(row.get("title") or "")
+        description = str(row.get("description") or "")
+        deadline = str(row.get("deadlineDate") or "")
         start_date = row.get("startDate")
-        deadline = str(row.get("deadlineDate") or "N/A")
 
-        # Skip bad entries
-        if identifier == "N/A":
+        # Skip garbage rows
+        if not reference or reference.startswith("COMPETITIVE_CALL"):
             continue
 
-        # --- RSS STANDARD FIELDS ---
-        SubElement(item, "title").text = identifier
-        SubElement(item, "link").text = url
-        SubElement(item, "guid").text = identifier
+        item = SubElement(channel, "item")
 
-        # --- DESCRIPTION (VISIBLE CONTENT) ---
-        description_html = f"""
-        <b>Identifier:</b> {html.escape(identifier)}<br>
-        <b>Start date:</b> {html.escape(str(start_date))}<br>
+        url = f"https://ec.europa.eu/info/funding-tenders/opportunities/portal/screen/opportunities/topic-details/{reference}"
+
+        # --- RSS fields ---
+        SubElement(item, "title").text = f"{reference} - {title}"
+        SubElement(item, "link").text = url
+        SubElement(item, "guid").text = reference
+
+        # --- readable description ---
+        desc_html = f"""
+        <b>Reference:</b> {html.escape(reference)}<br>
         <b>Deadline:</b> {html.escape(deadline)}<br>
         <b>Link:</b> <a href="{url}">View call</a><br><br>
-        {html.escape(summary)}
+        {html.escape(description[:1000])}
         """
 
-        SubElement(item, "description").text = description_html
+        SubElement(item, "description").text = desc_html
 
-        # --- PUB DATE ---
+        # --- date ---
         if pd.notna(start_date):
-            try:
-                dt = pd.to_datetime(start_date)
-                SubElement(item, "pubDate").text = dt.strftime("%a, %d %b %Y %H:%M:%S GMT")
-            except:
-                pass
+            dt = pd.to_datetime(start_date)
+            SubElement(item, "pubDate").text = dt.strftime("%a, %d %b %Y %H:%M:%S GMT")
 
-    ElementTree(rss).write(output_file, encoding="utf-8", xml_declaration=True)
+    # ✅ PRETTY PRINT (fixes your “one-line XML” issue)
+    import xml.dom.minidom as minidom
+    rough_string = ElementTree(rss).write("temp.xml", encoding="utf-8", xml_declaration=True)
+
+    with open("temp.xml", "r", encoding="utf-8") as f:
+        parsed = minidom.parseString(f.read())
+
+    with open(output_file, "w", encoding="utf-8") as f:
+        f.write(parsed.toprettyxml(indent="  "))
+
     print(f"RSS updated → {output_file}")
 
 # --- RUN ---
