@@ -41,12 +41,20 @@ jobs:
           git config --global user.name "github-actions"
           git config --global user.email "actions@github.com"
 
-          # ✅ Pull FIRST (fixes your git error)
-          git pull --rebase origin main || echo "Nothing to rebase"
+          # 🧹 Save local changes temporarily
+          git stash --include-untracked
 
-          # Add only RSS (recommended)
+          # 🔄 Get latest repo state
+          git pull --rebase origin main
+
+          # 🔙 Restore your changes
+          git stash pop || echo "No stash to apply"
+
+          # 📦 Add RSS file
           git add eu_calls_feed.xml
 
+          # 💾 Commit if needed
           git commit -m "Update RSS feed" || echo "No changes"
 
+          # 🚀 Push
           git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
