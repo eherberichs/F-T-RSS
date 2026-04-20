@@ -74,9 +74,12 @@ if all_records:
     df = pd.json_normalize(all_records)
     df["fetched_at"] = datetime.now(UTC)
 
-    if "startDate" not in df.columns:
-        df["startDate"] = None
+    # Ensure required columns exist
+    for col in ["reference", "title", "description", "deadlineDate", "startDate"]:
+        if col not in df.columns:
+            df[col] = None
 
+    # Clean + convert dates
     df["startDate"] = pd.to_datetime(df["startDate"], errors="coerce")
     df = df.sort_values("startDate", ascending=False, na_position="last")
 
@@ -99,19 +102,20 @@ def create_rss(df, output_file):
     for _, row in df.iterrows():
         item = SubElement(channel, "item")
 
-        reference = str(row.get("reference", "N/A"))
-        title = str(row.get("title", "No title"))
-        deadline = str(row.get("deadlineDate", "N/A"))
-        summary = str(row.get("description", "No description"))[:1000]
+        # --- SAFE FIELD EXTRACTION ---
+        reference = str(row.get("reference") or "N/A")
+        title = str(row.get("title") or "Untitled call")
+        deadline = str(row.get("deadlineDate") or "N/A")
+        summary = str(row.get("description") or "No description available")[:1000]
 
         url = f"https://ec.europa.eu/info/funding-tenders/opportunities/portal/screen/opportunities/topic-details/{reference}"
 
-        # --- RSS STANDARD FIELDS ---
-        SubElement(item, "title").text = f"{reference} - {title}"
+        # --- STANDARD RSS FIELDS ---
+        SubElement(item, "title").text = title
         SubElement(item, "link").text = url
         SubElement(item, "guid").text = reference
 
-        # --- HTML DESCRIPTION (THIS IS WHAT USERS SEE) ---
+        # --- DESCRIPTION (VISIBLE IN RSS READERS) ---
         description_html = f"""
         <b>Reference:</b> {html.escape(reference)}<br>
         <b>Deadline:</b> {html.escape(deadline)}<br>
@@ -121,7 +125,7 @@ def create_rss(df, output_file):
 
         SubElement(item, "description").text = description_html
 
-        # --- DATE ---
+        # --- PUBLICATION DATE ---
         pub_date = row.get("startDate")
         if pd.notna(pub_date):
             dt = pd.to_datetime(pub_date)
