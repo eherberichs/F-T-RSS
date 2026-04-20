@@ -4,6 +4,7 @@ import pandas as pd
 from datetime import datetime, UTC
 from pathlib import Path
 from xml.etree.ElementTree import Element, SubElement, ElementTree
+import html
 
 # --- CONFIG ---
 API_URL = "https://api.tech.ec.europa.eu/search-api/prod/rest/search"
@@ -35,10 +36,8 @@ payload = {
     },
     "languages": ["en"],
     "displayFields": [
-        "type", "reference", "callccm2Id",
-        "title", "status", "caName", "projectAcronym",
-        "startDate", "description", "deadlineDate",
-        "deadlineModel", "frameworkProgramme", "typesOfAction",
+        "reference", "title", "startDate",
+        "description", "deadlineDate"
     ],
 }
 
@@ -47,7 +46,7 @@ files = {
     for k, v in payload.items()
 }
 
-# --- FETCH DATA (PAGINATED) ---
+# --- FETCH DATA ---
 all_records = []
 page = 1
 
@@ -70,67 +69,66 @@ while True:
 
     page += 1
 
-# --- SAVE CSV ---
+# --- DATAFRAME ---
 if all_records:
     df = pd.json_normalize(all_records)
     df["fetched_at"] = datetime.now(UTC)
 
-    print("Columns in dataframe:")
-    print(df.columns.tolist())
-
-    # Ensure startDate exists
     if "startDate" not in df.columns:
-        print("⚠️ 'startDate' column missing. Using fallback.")
         df["startDate"] = None
 
-    # Convert + sort safely
     df["startDate"] = pd.to_datetime(df["startDate"], errors="coerce")
     df = df.sort_values("startDate", ascending=False, na_position="last")
 
     df.to_csv(DATA_FILE, index=False)
-    print(f"Saved {len(df)} records → {DATA_FILE}")
-
+    print(f"Saved {len(df)} records")
 else:
-    print("No records found.")
     df = pd.DataFrame()
+    print("No records found")
 
 # --- RSS GENERATION ---
 def create_rss(df, output_file):
     rss = Element("rss", version="2.0")
     channel = SubElement(rss, "channel")
 
-    SubElement(channel, "title").text = "EU Funding Calls (2021–2027)"
+    SubElement(channel, "title").text = "EU Funding Calls"
     SubElement(channel, "link").text = "https://ec.europa.eu/info/funding-tenders/opportunities/portal"
-    SubElement(channel, "description").text = "Latest open EU funding calls"
+    SubElement(channel, "description").text = "Latest EU funding opportunities"
     SubElement(channel, "lastBuildDate").text = datetime.now(UTC).strftime("%a, %d %b %Y %H:%M:%S GMT")
 
     for _, row in df.iterrows():
         item = SubElement(channel, "item")
 
-        reference = row.get("reference", "N/A")
-        title = row.get("title", "No title")
-        deadline = row.get("deadlineDate", "")
+        reference = str(row.get("reference", "N/A"))
+        title = str(row.get("title", "No title"))
+        deadline = str(row.get("deadlineDate", "N/A"))
+        summary = str(row.get("description", "No description"))[:1000]
 
-        SubElement(item, "title").text = f"{reference} - {title} (Deadline: {deadline})"
+        url = f"https://ec.europa.eu/info/funding-tenders/opportunities/portal/screen/opportunities/topic-details/{reference}"
 
-        link = f"https://ec.europa.eu/info/funding-tenders/opportunities/portal/screen/opportunities/topic-details/{reference}"
-        SubElement(item, "link").text = link
-
+        # --- RSS STANDARD FIELDS ---
+        SubElement(item, "title").text = f"{reference} - {title}"
+        SubElement(item, "link").text = url
         SubElement(item, "guid").text = reference
 
-        desc = row.get("description", "No description")
-        SubElement(item, "description").text = desc[:1000]
+        # --- HTML DESCRIPTION (THIS IS WHAT USERS SEE) ---
+        description_html = f"""
+        <b>Reference:</b> {html.escape(reference)}<br>
+        <b>Deadline:</b> {html.escape(deadline)}<br>
+        <b>Link:</b> <a href="{url}">View call</a><br><br>
+        {html.escape(summary)}
+        """
 
+        SubElement(item, "description").text = description_html
+
+        # --- DATE ---
         pub_date = row.get("startDate")
         if pd.notna(pub_date):
-            try:
-                dt = pd.to_datetime(pub_date)
-                SubElement(item, "pubDate").text = dt.strftime("%a, %d %b %Y %H:%M:%S GMT")
-            except:
-                pass
+            dt = pd.to_datetime(pub_date)
+            SubElement(item, "pubDate").text = dt.strftime("%a, %d %b %Y %H:%M:%S GMT")
 
     ElementTree(rss).write(output_file, encoding="utf-8", xml_declaration=True)
-    print(f"RSS feed updated → {output_file}")
+    print(f"RSS updated → {output_file}")
 
-# --- CREATE RSS (always create file) ---
+# --- RUN ---
 create_rss(df, RSS_FILE)
