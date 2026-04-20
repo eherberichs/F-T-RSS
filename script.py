@@ -107,57 +107,31 @@ def create_rss(df, output_file):
     rss = Element("rss", version="2.0")
     channel = SubElement(rss, "channel")
 
-    SubElement(channel, "title").text = "EU Funding Calls (2021–2027)"
+    SubElement(channel, "title").text = "EU Funding Calls"
     SubElement(channel, "link").text = "https://ec.europa.eu/info/funding-tenders/opportunities/portal"
-    SubElement(channel, "description").text = "Latest open EU funding calls"
-    SubElement(channel, "lastBuildDate").text = datetime.now(UTC).strftime("%a, %d %b %Y %H:%M:%S GMT")
+    SubElement(channel, "description").text = "Latest EU funding calls"
 
     for _, row in df.iterrows():
-        reference = str(row.get("reference") or "")
-        title = str(row.get("title") or "")
-        description = str(row.get("description") or "")
-        deadline = str(row.get("deadlineDate") or "")
-        start_date = row.get("startDate")
+        reference = str(row.get("reference") or "").strip()
+        title = str(row.get("title") or "").strip()
 
-        # Skip garbage rows
-        if not reference or reference.startswith("COMPETITIVE_CALL"):
+        # Skip broken rows
+        if not reference or not title:
             continue
 
         item = SubElement(channel, "item")
 
         url = f"https://ec.europa.eu/info/funding-tenders/opportunities/portal/screen/opportunities/topic-details/{reference}"
 
-        # --- RSS fields ---
         SubElement(item, "title").text = f"{reference} - {title}"
         SubElement(item, "link").text = url
         SubElement(item, "guid").text = reference
 
-        # --- readable description ---
-        desc_html = f"""
-        <b>Reference:</b> {html.escape(reference)}<br>
-        <b>Deadline:</b> {html.escape(deadline)}<br>
-        <b>Link:</b> <a href="{url}">View call</a><br><br>
-        {html.escape(description[:1000])}
-        """
+        desc = str(row.get("description") or "")[:500]
+        SubElement(item, "description").text = desc
 
-        SubElement(item, "description").text = desc_html
-
-        # --- date ---
-        if pd.notna(start_date):
-            dt = pd.to_datetime(start_date)
-            SubElement(item, "pubDate").text = dt.strftime("%a, %d %b %Y %H:%M:%S GMT")
-
-    # ✅ PRETTY PRINT (fixes your “one-line XML” issue)
-    import xml.dom.minidom as minidom
-    rough_string = ElementTree(rss).write("temp.xml", encoding="utf-8", xml_declaration=True)
-
-    with open("temp.xml", "r", encoding="utf-8") as f:
-        parsed = minidom.parseString(f.read())
-
-    with open(output_file, "w", encoding="utf-8") as f:
-        f.write(parsed.toprettyxml(indent="  "))
-
-    print(f"RSS updated → {output_file}")
+    ElementTree(rss).write(output_file, encoding="utf-8", xml_declaration=True)
+    print("RSS created")
 
 # --- RUN ---
 create_rss(df, RSS_FILE)
