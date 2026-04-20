@@ -75,20 +75,21 @@ if all_records:
     df = pd.json_normalize(all_records)
     df["fetched_at"] = datetime.now(UTC)
 
-# --- Ensure startDate exists ---
-if "startDate" not in df.columns:
-    print("⚠️ 'startDate' column missing. Available columns:")
+    print("Columns in dataframe:")
     print(df.columns.tolist())
-    df["startDate"] = None  # fallback to avoid crash
 
-# Convert to datetime safely
-df["startDate"] = pd.to_datetime(df["startDate"], errors="coerce")
+    # Ensure startDate exists
+    if "startDate" not in df.columns:
+        print("⚠️ 'startDate' column missing. Using fallback.")
+        df["startDate"] = None
 
-# Sort safely
-df = df.sort_values("startDate", ascending=False, na_position="last")
+    # Convert + sort safely
+    df["startDate"] = pd.to_datetime(df["startDate"], errors="coerce")
+    df = df.sort_values("startDate", ascending=False, na_position="last")
 
     df.to_csv(DATA_FILE, index=False)
     print(f"Saved {len(df)} records → {DATA_FILE}")
+
 else:
     print("No records found.")
     df = pd.DataFrame()
@@ -98,7 +99,6 @@ def create_rss(df, output_file):
     rss = Element("rss", version="2.0")
     channel = SubElement(rss, "channel")
 
-    # Channel metadata
     SubElement(channel, "title").text = "EU Funding Calls (2021–2027)"
     SubElement(channel, "link").text = "https://ec.europa.eu/info/funding-tenders/opportunities/portal"
     SubElement(channel, "description").text = "Latest open EU funding calls"
@@ -111,25 +111,20 @@ def create_rss(df, output_file):
         title = row.get("title", "No title")
         deadline = row.get("deadlineDate", "")
 
-        # Title (include deadline for readability)
         SubElement(item, "title").text = f"{reference} - {title} (Deadline: {deadline})"
 
-        # Link
         link = f"https://ec.europa.eu/info/funding-tenders/opportunities/portal/screen/opportunities/topic-details/{reference}"
         SubElement(item, "link").text = link
 
-        # Unique ID (important for RSS readers)
         SubElement(item, "guid").text = reference
 
-        # Description (truncate to avoid huge feeds)
         desc = row.get("description", "No description")
         SubElement(item, "description").text = desc[:1000]
 
-        # Publication date
         pub_date = row.get("startDate")
-        if pub_date:
+        if pd.notna(pub_date):
             try:
-                dt = datetime.fromisoformat(pub_date.replace("Z", "+00:00"))
+                dt = pd.to_datetime(pub_date)
                 SubElement(item, "pubDate").text = dt.strftime("%a, %d %b %Y %H:%M:%S GMT")
             except:
                 pass
@@ -137,8 +132,5 @@ def create_rss(df, output_file):
     ElementTree(rss).write(output_file, encoding="utf-8", xml_declaration=True)
     print(f"RSS feed updated → {output_file}")
 
-# --- CREATE RSS ---
-if not df.empty:
-    create_rss(df, RSS_FILE)
-else:
-    print("RSS not generated (no data).")
+# --- CREATE RSS (always create file) ---
+create_rss(df, RSS_FILE)
