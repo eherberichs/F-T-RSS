@@ -2,8 +2,11 @@ name: Update EU Calls RSS Feed
 
 on:
   schedule:
-    - cron: "0 7 * * *"   # runs every day at 07:00 UTC
-  workflow_dispatch:       # lets you run it manually from the UI
+    - cron: "0 7 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write   #
 
 jobs:
   update-feed:
