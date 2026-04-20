@@ -100,39 +100,53 @@ def create_rss(df, output_file):
     SubElement(channel, "lastBuildDate").text = datetime.now(UTC).strftime("%a, %d %b %Y %H:%M:%S GMT")
 
     for _, row in df.iterrows():
-        item = SubElement(channel, "item")
+    item = SubElement(channel, "item")
 
-        # --- SAFE FIELD EXTRACTION ---
-        reference = str(row.get("reference") or "N/A")
-        title = str(row.get("title") or "Untitled call")
-        deadline = str(row.get("deadlineDate") or "N/A")
-        summary = str(row.get("description") or "No description available")[:1000]
+    # --- EXACT FIELD MAPPING ---
+    identifier = str(
+        row.get("metadata.identifier")
+        or row.get("identifier")
+        or row.get("reference")
+        or "N/A"
+    )
 
-        url = f"https://ec.europa.eu/info/funding-tenders/opportunities/portal/screen/opportunities/topic-details/{reference}"
+    summary = str(
+        row.get("summary")
+        or row.get("description")
+        or "No summary available"
+    )[:1000]
 
-        # --- STANDARD RSS FIELDS ---
-        SubElement(item, "title").text = title
-        SubElement(item, "link").text = url
-        SubElement(item, "guid").text = reference
+    url = str(
+        row.get("url")
+        or f"https://ec.europa.eu/info/funding-tenders/opportunities/portal/screen/opportunities/topic-details/{identifier}"
+    )
 
-        # --- DESCRIPTION (VISIBLE IN RSS READERS) ---
-        description_html = f"""
-        <b>Reference:</b> {html.escape(reference)}<br>
-        <b>Deadline:</b> {html.escape(deadline)}<br>
-        <b>Link:</b> <a href="{url}">View call</a><br><br>
-        {html.escape(summary)}
-        """
+    start_date = row.get("startDate")
+    deadline = str(row.get("deadlineDate") or "N/A")
 
-        SubElement(item, "description").text = description_html
+    # --- RSS STANDARD FIELDS ---
+    SubElement(item, "title").text = identifier
+    SubElement(item, "link").text = url
+    SubElement(item, "guid").text = identifier
 
-        # --- PUBLICATION DATE ---
-        pub_date = row.get("startDate")
-        if pd.notna(pub_date):
-            dt = pd.to_datetime(pub_date)
+    # --- DESCRIPTION (VISIBLE CONTENT) ---
+    description_html = f"""
+    <b>Identifier:</b> {html.escape(identifier)}<br>
+    <b>Start date:</b> {html.escape(str(start_date))}<br>
+    <b>Deadline:</b> {html.escape(deadline)}<br>
+    <b>Link:</b> <a href="{url}">View call</a><br><br>
+    {html.escape(summary)}
+    """
+
+    SubElement(item, "description").text = description_html
+
+    # --- PUB DATE ---
+    if pd.notna(start_date):
+        try:
+            dt = pd.to_datetime(start_date)
             SubElement(item, "pubDate").text = dt.strftime("%a, %d %b %Y %H:%M:%S GMT")
-
-    ElementTree(rss).write(output_file, encoding="utf-8", xml_declaration=True)
-    print(f"RSS updated → {output_file}")
+        except:
+            pass
 
 # --- RUN ---
 create_rss(df, RSS_FILE)
