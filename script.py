@@ -107,7 +107,10 @@ def build_dataframe(records):
     print("Columns:", df.columns.tolist())
 
     # normalize fields with metadata fallback
-    df["reference"] = df.get("reference") or df.get("metadata.REFERENCE")
+    if "reference" in df.columns and "metadata.REFERENCE" in df.columns:
+        df["reference"] = df["reference"].fillna(df["metadata.REFERENCE"])
+    elif "metadata.REFERENCE" in df.columns:
+    df["reference"] = df["metadata.REFERENCE"]
     df["identifier"] = df.get("identifier") or df.get("metadata.identifier")
     df["startDate"] = pd.to_datetime(df.get("startDate") or df.get("metadata.startDate"), errors="coerce")
     df["deadlineDate"] = df.get("deadlineDate") or df.get("metadata.deadlineDate")
