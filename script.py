@@ -69,6 +69,16 @@ def format_date(dt):
         return None
     return eut.format_datetime(dt)
 
+def merge_cols(df, primary, fallback):
+    """Safely merge two columns (no pandas boolean errors)"""
+    if primary in df.columns and fallback in df.columns:
+        return df[primary].fillna(df[fallback])
+    if primary in df.columns:
+        return df[primary]
+    if fallback in df.columns:
+        return df[fallback]
+    return None
+
 # --- FETCH DATA ---
 def fetch_all():
     all_records = []
@@ -106,68 +116,28 @@ def build_dataframe(records):
 
     print("Columns:", df.columns.tolist())
 
-   # --- normalize fields safely (NO "or" with Series!) ---
+    # ✅ safe normalization
+    df["reference"] = merge_cols(df, "reference", "metadata.REFERENCE")
+    df["identifier"] = merge_cols(df, "identifier", "metadata.identifier")
+    df["title"] = merge_cols(df, "title", "metadata.title")
+    df["description"] = merge_cols(df, "description", "metadata.description")
+    df["startDate"] = merge_cols(df, "startDate", "metadata.startDate")
+    df["deadlineDate"] = merge_cols(df, "deadlineDate", "metadata.deadlineDate")
+    df["status"] = merge_cols(df, "status", "metadata.status")
+    df["type"] = merge_cols(df, "type", "metadata.type")
+    df["frameworkProgramme"] = merge_cols(df, "frameworkProgramme", "metadata.frameworkProgramme")
+    df["typesOfAction"] = merge_cols(df, "typesOfAction", "metadata.typesOfAction")
+    df["caName"] = merge_cols(df, "caName", "metadata.caName")
+    df["projectAcronym"] = merge_cols(df, "projectAcronym", "metadata.projectAcronym")
+    df["callccm2Id"] = merge_cols(df, "callccm2Id", "metadata.callccm2Id")
+    df["deadlineModel"] = merge_cols(df, "deadlineModel", "metadata.deadlineModel")
 
-# reference
-if "reference" in df.columns:
-    df["reference"] = df["reference"]
-elif "metadata.REFERENCE" in df.columns:
-    df["reference"] = df["metadata.REFERENCE"]
-else:
-    df["reference"] = None
+    # dates
+    df["startDate"] = pd.to_datetime(df["startDate"], errors="coerce")
 
-if "metadata.REFERENCE" in df.columns:
-    df["reference"] = df["reference"].fillna(df["metadata.REFERENCE"])
-
-
-# identifier
-if "identifier" in df.columns:
-    df["identifier"] = df["identifier"]
-elif "metadata.identifier" in df.columns:
-    df["identifier"] = df["metadata.identifier"]
-else:
-    df["identifier"] = None
-
-if "metadata.identifier" in df.columns:
-    df["identifier"] = df["identifier"].fillna(df["metadata.identifier"])
-
-
-# startDate
-if "startDate" in df.columns:
-    df["startDate"] = df["startDate"]
-elif "metadata.startDate" in df.columns:
-    df["startDate"] = df["metadata.startDate"]
-else:
-    df["startDate"] = None
-
-if "metadata.startDate" in df.columns:
-    df["startDate"] = df["startDate"].fillna(df["metadata.startDate"])
-
-df["startDate"] = pd.to_datetime(df["startDate"], errors="coerce")
-
-
-# deadlineDate
-if "deadlineDate" in df.columns:
-    df["deadlineDate"] = df["deadlineDate"]
-elif "metadata.deadlineDate" in df.columns:
-    df["deadlineDate"] = df["metadata.deadlineDate"]
-else:
-    df["deadlineDate"] = None
-
-if "metadata.deadlineDate" in df.columns:
-    df["deadlineDate"] = df["deadlineDate"].fillna(df["metadata.deadlineDate"])
-
-
-# description
-if "description" in df.columns:
-    df["description"] = df["description"]
-elif "metadata.description" in df.columns:
-    df["description"] = df["metadata.description"]
-else:
-    df["description"] = None
-
-if "metadata.description" in df.columns:
-    df["description"] = df["description"].fillna(df["metadata.description"])
+    # clean + sort
+    df = df.drop_duplicates(subset=["reference"])
+    df = df.sort_values("startDate", ascending=False, na_position="last")
 
     df.to_csv(DATA_FILE, index=False)
     print(f"Saved {len(df)} records")
