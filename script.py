@@ -112,8 +112,8 @@ def create_rss(df, output_file):
     SubElement(channel, "description").text = "Latest EU funding calls"
 
     for _, row in df.iterrows():
-        reference = str(row.get("reference") or "").strip()
-        title = str(row.get("summary") or "").strip()
+        summary = str(row.get("summary") or "").strip()
+        url = str(row.get("url") or "").strip()
 
         # Skip broken rows
         if not reference or not title:
@@ -123,10 +123,9 @@ def create_rss(df, output_file):
 
         url = f"https://ec.europa.eu/info/funding-tenders/opportunities/portal/screen/opportunities/topic-details/{reference}"
 
-        SubElement(item, "title").text = f"{reference} - {title}"
-        SubElement(item, "link").text = url
         SubElement(item, "guid").text = summary
-
+        SubElement(item, "link").text = url
+        
         desc = str(row.get("description") or "")[:500]
         SubElement(item, "description").text = desc
 
