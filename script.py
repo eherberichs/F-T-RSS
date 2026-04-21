@@ -4,7 +4,6 @@ import pandas as pd
 from datetime import datetime, UTC
 from pathlib import Path
 from xml.etree.ElementTree import Element, SubElement, ElementTree
-import html
 
 # --- CONFIG ---
 API_URL = "https://api.tech.ec.europa.eu/search-api/prod/rest/search"
@@ -41,7 +40,7 @@ payload = {
         "url",
         "startDate",
         "deadlineDate",
-        "description"  # fallback if summary missing
+        "description",
     ],
 }
 
@@ -81,14 +80,16 @@ if all_records:
     print("Columns:", df.columns.tolist())
 
     # Ensure expected columns exist
-    for col in [
+    expected_cols = [
         "metadata.identifier",
         "summary",
         "url",
         "startDate",
         "deadlineDate",
         "description",
-    ]:
+    ]
+
+    for col in expected_cols:
         if col not in df.columns:
             df[col] = None
 
@@ -112,10 +113,14 @@ def create_rss(df, output_file):
     SubElement(channel, "description").text = "Latest EU funding calls"
 
     for _, row in df.iterrows():
+        reference = str(row.get("metadata.identifier") or "").strip()
         summary = str(row.get("summary") or "").strip()
-        url = str(row.get("url") or "").strip()
+        description = str(row.get("description") or "").strip()
 
-        # Skip broken rows
+        # fallback if summary missing
+        title = summary if summary else description[:120]
+
+        # Skip invalid rows
         if not reference or not title:
             continue
 
@@ -123,11 +128,11 @@ def create_rss(df, output_file):
 
         url = f"https://ec.europa.eu/info/funding-tenders/opportunities/portal/screen/opportunities/topic-details/{reference}"
 
-        SubElement(item, "guid").text = summary
+        SubElement(item, "guid").text = reference
+        SubElement(item, "title").text = title
         SubElement(item, "link").text = url
-        
-        desc = str(row.get("description") or "")[:500]
-        SubElement(item, "description").text = desc
+
+        SubElement(item, "description").text = description[:500]
 
     ElementTree(rss).write(output_file, encoding="utf-8", xml_declaration=True)
     print("RSS created")
