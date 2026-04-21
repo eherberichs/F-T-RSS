@@ -106,18 +106,68 @@ def build_dataframe(records):
 
     print("Columns:", df.columns.tolist())
 
-    # normalize fields with metadata fallback
-    if "reference" in df.columns and "metadata.REFERENCE" in df.columns:
-        df["reference"] = df["reference"].fillna(df["metadata.REFERENCE"])
-    elif "metadata.REFERENCE" in df.columns:
-    df["reference"] = df["metadata.REFERENCE"]
-    df["identifier"] = df.get("identifier") or df.get("metadata.identifier")
-    df["startDate"] = pd.to_datetime(df.get("startDate") or df.get("metadata.startDate"), errors="coerce")
-    df["deadlineDate"] = df.get("deadlineDate") or df.get("metadata.deadlineDate")
-    df["description"] = df.get("description") or df.get("metadata.description")
+   # --- normalize fields safely (NO "or" with Series!) ---
 
-    df = df.drop_duplicates(subset=["reference"])
-    df = df.sort_values("startDate", ascending=False, na_position="last")
+# reference
+if "reference" in df.columns:
+    df["reference"] = df["reference"]
+elif "metadata.REFERENCE" in df.columns:
+    df["reference"] = df["metadata.REFERENCE"]
+else:
+    df["reference"] = None
+
+if "metadata.REFERENCE" in df.columns:
+    df["reference"] = df["reference"].fillna(df["metadata.REFERENCE"])
+
+
+# identifier
+if "identifier" in df.columns:
+    df["identifier"] = df["identifier"]
+elif "metadata.identifier" in df.columns:
+    df["identifier"] = df["metadata.identifier"]
+else:
+    df["identifier"] = None
+
+if "metadata.identifier" in df.columns:
+    df["identifier"] = df["identifier"].fillna(df["metadata.identifier"])
+
+
+# startDate
+if "startDate" in df.columns:
+    df["startDate"] = df["startDate"]
+elif "metadata.startDate" in df.columns:
+    df["startDate"] = df["metadata.startDate"]
+else:
+    df["startDate"] = None
+
+if "metadata.startDate" in df.columns:
+    df["startDate"] = df["startDate"].fillna(df["metadata.startDate"])
+
+df["startDate"] = pd.to_datetime(df["startDate"], errors="coerce")
+
+
+# deadlineDate
+if "deadlineDate" in df.columns:
+    df["deadlineDate"] = df["deadlineDate"]
+elif "metadata.deadlineDate" in df.columns:
+    df["deadlineDate"] = df["metadata.deadlineDate"]
+else:
+    df["deadlineDate"] = None
+
+if "metadata.deadlineDate" in df.columns:
+    df["deadlineDate"] = df["deadlineDate"].fillna(df["metadata.deadlineDate"])
+
+
+# description
+if "description" in df.columns:
+    df["description"] = df["description"]
+elif "metadata.description" in df.columns:
+    df["description"] = df["metadata.description"]
+else:
+    df["description"] = None
+
+if "metadata.description" in df.columns:
+    df["description"] = df["description"].fillna(df["metadata.description"])
 
     df.to_csv(DATA_FILE, index=False)
     print(f"Saved {len(df)} records")
