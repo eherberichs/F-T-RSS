@@ -2,12 +2,15 @@ name: Update EU Funding RSS
 
 on:
   schedule:
-    - cron: "0 6 * * *"  # every day at 06:00 UTC
-  workflow_dispatch:     # manual run button
+    - cron: "0 6 * * *"   # daily at 06:00 UTC
+  workflow_dispatch:
 
 jobs:
   update_rss:
     runs-on: ubuntu-latest
+
+    permissions:
+      contents: write   # REQUIRED to push changes
 
     steps:
       - name: Checkout repo
@@ -19,15 +22,25 @@ jobs:
           python-version: "3.11"
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
 
       - name: Run script
-        run: python script.py
-        
-      - name: Commit changes
+        run: |
+          python script.py
+
+      - name: Commit and push if changed
         run: |
           git config --local user.name "github-actions"
           git config --local user.email "actions@github.com"
+
           git add eu_calls_snapshot.csv eu_calls_feed.xml
-          git commit -m "Daily update" || echo "No changes"
-          git push
+
+          # Only commit if there are changes
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "Daily RSS update"
+            git push
+          fi
