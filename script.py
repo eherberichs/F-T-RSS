@@ -111,24 +111,44 @@ def create_rss(df, output_file):
     SubElement(channel, "link").text = "https://ec.europa.eu/info/funding-tenders/opportunities/portal"
     SubElement(channel, "description").text = "Latest EU funding calls"
 
-    for _, row in df.iterrows():
-        reference = str(row.get("reference") or "").strip()
-        title = str(row.get("title") or "").strip()
+ for _, row in df.iterrows():
+    reference = safe_text(row.get("reference"))
+    if not reference:
+        continue
 
-        # Skip broken rows
-        if not reference or not title:
-            continue
+    title = safe_text(row.get("title") or row.get("identifier"), 200)
 
-        item = SubElement(channel, "item")
+    url = f"https://ec.europa.eu/info/funding-tenders/opportunities/portal/screen/opportunities/topic-details/{reference}"
 
-        url = f"https://ec.europa.eu/info/funding-tenders/opportunities/portal/screen/opportunities/topic-details/{reference}"
+    item = SubElement(channel, "item")
 
-        SubElement(item, "title").text = f"{reference} - {title}"
-        SubElement(item, "link").text = url
-        SubElement(item, "guid").text = reference
+    SubElement(item, "guid", isPermaLink="false").text = reference
+    SubElement(item, "title").text = title
+    SubElement(item, "link").text = url
 
-        desc = str(row.get("description") or "")[:500]
-        SubElement(item, "description").text = desc
+    # --- FULL STRUCTURED DESCRIPTION ---
+    desc_parts = [
+        f"<b>Type:</b> {safe_text(row.get('type'))}",
+        f"<b>Identifier:</b> {safe_text(row.get('identifier'))}",
+        f"<b>Reference:</b> {reference}",
+        f"<b>Call ID:</b> {safe_text(row.get('callccm2Id'))}",
+        f"<b>Status:</b> {safe_text(row.get('status'))}",
+        f"<b>Programme:</b> {safe_text(row.get('frameworkProgramme'))}",
+        f"<b>Action Type:</b> {safe_text(row.get('typesOfAction'))}",
+        f"<b>CA Name:</b> {safe_text(row.get('caName'))}",
+        f"<b>Project Acronym:</b> {safe_text(row.get('projectAcronym'))}",
+        f"<b>Start Date:</b> {safe_text(row.get('startDate'))}",
+        f"<b>Deadline:</b> {safe_text(row.get('deadlineDate'))}",
+        f"<b>Deadline Model:</b> {safe_text(row.get('deadlineModel'))}",
+        "<br><br>",
+        safe_text(row.get("description"), 1000),
+    ]
+
+    SubElement(item, "description").text = "".join(desc_parts)
+
+    pub_date = format_date(row.get("startDate"))
+    if pub_date:
+        SubElement(item, "pubDate").text = pub_date
 
     ElementTree(rss).write(output_file, encoding="utf-8", xml_declaration=True)
     print("RSS created")
