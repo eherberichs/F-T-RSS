@@ -40,7 +40,6 @@ payload = {
         "reference",
         "identifier",
         "title",
-        "summary",
         "description",
         "startDate",
         "deadlineDate",
@@ -107,7 +106,7 @@ def build_dataframe(records):
 
     print("Columns:", df.columns.tolist())
 
-    # normalize key fields (handles metadata.* fallback)
+    # normalize fields with metadata fallback
     df["reference"] = df.get("reference") or df.get("metadata.REFERENCE")
     df["identifier"] = df.get("identifier") or df.get("metadata.identifier")
     df["startDate"] = pd.to_datetime(df.get("startDate") or df.get("metadata.startDate"), errors="coerce")
@@ -137,7 +136,7 @@ def create_rss(df, output_file):
         if not reference:
             continue
 
-        title = safe_text(row.get("title") or row.get("summary") or row.get("identifier"), 200)
+        title = safe_text(row.get("title") or row.get("identifier"), 200)
         if not title:
             continue
 
@@ -145,7 +144,6 @@ def create_rss(df, output_file):
 
         item = SubElement(channel, "item")
 
-        # ✅ FIX: no undefined 'summary' anymore
         SubElement(item, "guid", isPermaLink="false").text = reference
         SubElement(item, "title").text = title
         SubElement(item, "link").text = url
