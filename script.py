@@ -112,10 +112,21 @@ def create_rss(df, output_file):
     SubElement(channel, "link").text = "https://ec.europa.eu/info/funding-tenders/opportunities/portal"
     SubElement(channel, "description").text = "Latest EU funding calls"
 
-    for _, row in df.iterrows():
-        reference = str(row.get("metadata.identifier") or "").strip()
-        summary = str(row.get("summary") or "").strip()
-        description = str(row.get("description") or "").strip()
+for _, row in df.iterrows():
+    reference = str(row.get("reference") or "").strip()
+    summary = str(row.get("summary") or "").strip()
+    title = str(row.get("title") or summary).strip()
+
+    if not reference or not title:
+        continue
+
+    item = SubElement(channel, "item")
+
+    url = f"https://ec.europa.eu/info/funding-tenders/opportunities/portal/screen/opportunities/topic-details/{reference}"
+
+    SubElement(item, "guid").text = reference
+    SubElement(item, "title").text = title
+    SubElement(item, "link").text = url
 
         # fallback if summary missing
         title = summary if summary else description[:120]
