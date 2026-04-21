@@ -6,7 +6,7 @@ on:
   workflow_dispatch:     # manual run button
 
 jobs:
-  build:
+  update_rss:
     runs-on: ubuntu-latest
 
     steps:
@@ -22,8 +22,8 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Run script
-        run: python fetch_and_build.py
-
+        run: script.py
+        
       - name: Commit changes
         run: |
           git config --local user.name "github-actions"
