@@ -113,7 +113,7 @@ def create_rss(df, output_file):
 
     for _, row in df.iterrows():
         reference = str(row.get("reference") or "").strip()
-        title = str(row.get("title") or "").strip()
+        title = str(row.get("summary") or "").strip()
 
         # Skip broken rows
         if not reference or not title:
@@ -125,7 +125,7 @@ def create_rss(df, output_file):
 
         SubElement(item, "title").text = f"{reference} - {title}"
         SubElement(item, "link").text = url
-        SubElement(item, "guid").text = reference
+        SubElement(item, "guid").text = summary
 
         desc = str(row.get("description") or "")[:500]
         SubElement(item, "description").text = desc
