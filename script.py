@@ -5,6 +5,7 @@ from datetime import datetime, UTC
 from pathlib import Path
 from xml.etree.ElementTree import Element, SubElement, ElementTree
 import html
+import email.utils as eut
 
 # --- CONFIG ---
 API_URL = "https://api.tech.ec.europa.eu/search-api/prod/rest/search"
@@ -36,12 +37,21 @@ payload = {
     },
     "languages": ["en"],
     "displayFields": [
-        "metadata.identifier",
+        "reference",
+        "identifier",
+        "title",
         "summary",
-        "url",
+        "description",
         "startDate",
         "deadlineDate",
-        "description"  # fallback if summary missing
+        "status",
+        "type",
+        "frameworkProgramme",
+        "typesOfAction",
+        "caName",
+        "projectAcronym",
+        "callccm2Id",
+        "deadlineModel",
     ],
 }
 
@@ -50,57 +60,67 @@ files = {
     for k, v in payload.items()
 }
 
+# --- HELPERS ---
+def safe_text(value, max_len=None):
+    text = html.escape(str(value or "").strip())
+    return text[:max_len] if max_len else text
+
+def format_date(dt):
+    if pd.isna(dt):
+        return None
+    return eut.format_datetime(dt)
+
 # --- FETCH DATA ---
-all_records = []
-page = 1
+def fetch_all():
+    all_records = []
+    page = 1
 
-while True:
-    PARAMS["pageNumber"] = page
+    while True:
+        PARAMS["pageNumber"] = page
 
-    res = requests.post(API_URL, params=PARAMS, files=files, headers=HEADERS)
-    res.raise_for_status()
-    data = res.json()
+        res = requests.post(API_URL, params=PARAMS, files=files, headers=HEADERS, timeout=30)
+        res.raise_for_status()
+        data = res.json()
 
-    records = data.get("results", [])
-    if not records:
-        break
+        records = data.get("results", [])
+        if not records:
+            break
 
-    all_records.extend(records)
-    print(f"Page {page}: {len(records)} records")
+        all_records.extend(records)
+        print(f"Page {page}: {len(records)} records")
 
-    if len(records) < PARAMS["pageSize"]:
-        break
+        if len(records) < PARAMS["pageSize"]:
+            break
 
-    page += 1
+        page += 1
+
+    return all_records
 
 # --- DATAFRAME ---
-if all_records:
-    df = pd.json_normalize(all_records)
+def build_dataframe(records):
+    if not records:
+        print("No records found")
+        return pd.DataFrame()
+
+    df = pd.json_normalize(records)
     df["fetched_at"] = datetime.now(UTC)
 
     print("Columns:", df.columns.tolist())
 
-    # Ensure expected columns exist
-    for col in [
-        "metadata.identifier",
-        "summary",
-        "url",
-        "startDate",
-        "deadlineDate",
-        "description",
-    ]:
-        if col not in df.columns:
-            df[col] = None
+    # normalize key fields (handles metadata.* fallback)
+    df["reference"] = df.get("reference") or df.get("metadata.REFERENCE")
+    df["identifier"] = df.get("identifier") or df.get("metadata.identifier")
+    df["startDate"] = pd.to_datetime(df.get("startDate") or df.get("metadata.startDate"), errors="coerce")
+    df["deadlineDate"] = df.get("deadlineDate") or df.get("metadata.deadlineDate")
+    df["description"] = df.get("description") or df.get("metadata.description")
 
-    df["startDate"] = pd.to_datetime(df["startDate"], errors="coerce")
+    df = df.drop_duplicates(subset=["reference"])
     df = df.sort_values("startDate", ascending=False, na_position="last")
 
     df.to_csv(DATA_FILE, index=False)
     print(f"Saved {len(df)} records")
 
-else:
-    df = pd.DataFrame()
-    print("No records found")
+    return df
 
 # --- RSS GENERATION ---
 def create_rss(df, output_file):
@@ -110,48 +130,54 @@ def create_rss(df, output_file):
     SubElement(channel, "title").text = "EU Funding Calls"
     SubElement(channel, "link").text = "https://ec.europa.eu/info/funding-tenders/opportunities/portal"
     SubElement(channel, "description").text = "Latest EU funding calls"
+    SubElement(channel, "lastBuildDate").text = eut.format_datetime(datetime.now(UTC))
 
- for _, row in df.iterrows():
-    reference = safe_text(row.get("reference"))
-    if not reference:
-        continue
+    for _, row in df.iterrows():
+        reference = safe_text(row.get("reference"))
+        if not reference:
+            continue
 
-    title = safe_text(row.get("title") or row.get("identifier"), 200)
+        title = safe_text(row.get("title") or row.get("summary") or row.get("identifier"), 200)
+        if not title:
+            continue
 
-    url = f"https://ec.europa.eu/info/funding-tenders/opportunities/portal/screen/opportunities/topic-details/{reference}"
+        url = f"https://ec.europa.eu/info/funding-tenders/opportunities/portal/screen/opportunities/topic-details/{reference}"
 
-    item = SubElement(channel, "item")
+        item = SubElement(channel, "item")
 
-    SubElement(item, "guid", isPermaLink="false").text = reference
-    SubElement(item, "title").text = title
-    SubElement(item, "link").text = url
+        # ✅ FIX: no undefined 'summary' anymore
+        SubElement(item, "guid", isPermaLink="false").text = reference
+        SubElement(item, "title").text = title
+        SubElement(item, "link").text = url
 
-    # --- FULL STRUCTURED DESCRIPTION ---
-    desc_parts = [
-        f"<b>Type:</b> {safe_text(row.get('type'))}",
-        f"<b>Identifier:</b> {safe_text(row.get('identifier'))}",
-        f"<b>Reference:</b> {reference}",
-        f"<b>Call ID:</b> {safe_text(row.get('callccm2Id'))}",
-        f"<b>Status:</b> {safe_text(row.get('status'))}",
-        f"<b>Programme:</b> {safe_text(row.get('frameworkProgramme'))}",
-        f"<b>Action Type:</b> {safe_text(row.get('typesOfAction'))}",
-        f"<b>CA Name:</b> {safe_text(row.get('caName'))}",
-        f"<b>Project Acronym:</b> {safe_text(row.get('projectAcronym'))}",
-        f"<b>Start Date:</b> {safe_text(row.get('startDate'))}",
-        f"<b>Deadline:</b> {safe_text(row.get('deadlineDate'))}",
-        f"<b>Deadline Model:</b> {safe_text(row.get('deadlineModel'))}",
-        "<br><br>",
-        safe_text(row.get("description"), 1000),
-    ]
+        desc_parts = [
+            f"<b>Type:</b> {safe_text(row.get('type'))}",
+            f"<b>Identifier:</b> {safe_text(row.get('identifier'))}",
+            f"<b>Reference:</b> {reference}",
+            f"<b>Call ID:</b> {safe_text(row.get('callccm2Id'))}",
+            f"<b>Status:</b> {safe_text(row.get('status'))}",
+            f"<b>Programme:</b> {safe_text(row.get('frameworkProgramme'))}",
+            f"<b>Action Type:</b> {safe_text(row.get('typesOfAction'))}",
+            f"<b>CA Name:</b> {safe_text(row.get('caName'))}",
+            f"<b>Project Acronym:</b> {safe_text(row.get('projectAcronym'))}",
+            f"<b>Start Date:</b> {safe_text(row.get('startDate'))}",
+            f"<b>Deadline:</b> {safe_text(row.get('deadlineDate'))}",
+            f"<b>Deadline Model:</b> {safe_text(row.get('deadlineModel'))}",
+            "<br><br>",
+            safe_text(row.get("description"), 1000),
+        ]
 
-    SubElement(item, "description").text = "".join(desc_parts)
+        SubElement(item, "description").text = "".join(desc_parts)
 
-    pub_date = format_date(row.get("startDate"))
-    if pub_date:
-        SubElement(item, "pubDate").text = pub_date
+        pub_date = format_date(row.get("startDate"))
+        if pub_date:
+            SubElement(item, "pubDate").text = pub_date
 
     ElementTree(rss).write(output_file, encoding="utf-8", xml_declaration=True)
     print("RSS created")
 
 # --- RUN ---
-create_rss(df, RSS_FILE)
+if __name__ == "__main__":
+    records = fetch_all()
+    df = build_dataframe(records)
+    create_rss(df, RSS_FILE)
