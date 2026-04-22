@@ -10,11 +10,13 @@ jobs:
     runs-on: ubuntu-latest
 
     permissions:
-      contents: write   # REQUIRED to push changes
+      contents: write
 
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # important for rebase
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -42,5 +44,9 @@ jobs:
             echo "No changes to commit"
           else
             git commit -m "Daily RSS update"
-            git push
+
+            # 🔑 Sync with remote before pushing
+            git pull --rebase origin main
+
+            git push origin main
           fi
